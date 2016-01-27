@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>mathjax</title>
+        <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS_CHTML"></script>
+        <script type="text/javascript" src="http://code.jquery.com/jquery-2.2.0.min.js"></script>
+        <style media="screen">
+            .eq {
+                height: 60px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="eq"><span>\( y \cdot 3 = 3 + x ^ 5 - y \qquad \)</span></div>
+        <div class="eq"><span>\( y = 3 \cdot x ^ 5 \qquad \)</span></div>
+        <div class="eq"><span>\( y = x ^ { 5 + 3 } \qquad \)</span></div>
+        <div class="eq"><span>\( 2 + 4 \cdot x = 3 \cdot x + 5 \qquad \)</span></div>
+        <div class="eq"><span>\( 2 + 4 \cdot x ^ 2 = 3 \cdot x + 5 + 6 \div 2 \div 3 \qquad \)</span></div>
+        <div class="eq"><span>\( y = ( 3 \cdot x + 5 ) \div 3 ^ 4 \qquad \)</span></div>
+        <button type="button" id="do">Solve</button>
+        <script type="text/javascript">
+            var ops = ['^','\\cdot','\\div','+','-','v']
+            var inverse = {
+                '^': 'v',
+                '\\cdot': '\\div',
+                '\\div': '\\cdot',
+                '+': '-',
+                '-': '+'
+            }
+
+            function Node (value, p, isLeftChild, left, right) {
+                this.parent = p
+                this.value = value
+                this.isLeftChild = isLeftChild
+                this.left = left
+                this.right = right
+            }
+
+            function unique(x) {
+                return x.filter(function(elem, index) { return x.indexOf(elem) === index; });
+            };
+
+            function prescedence (op) {
+                switch (op) {
+                    case '^': case 'v':
+                        return 4
+                    case '\\cdot': case '\\div':
+                        return 3
+                    case '+': case '-':
+                        return 2
+                    default:
+                        return 0
+                }
+            }
+
+            function isLeftAssoc (op) {
+                switch (op) {
+                    case '^':
+                        return false
+                    default:
+                        return true
+                }
+            }
+
+            function in2pre (input) {
+                var output = []
+                var op_stack = []
+                var tokenized = input.split(" ")
+                tokenized.reverse()
+                // console.log(tokenized);
+                while (tokenized.length) {
+                    // console.log(output, op_stack);
+                    var token = tokenized.shift()
+                    if (token == "") continue
+                    else if (!isNaN(token)) {
+                        output.push(parseInt(token))
+                    } else if (ops.indexOf(token) > -1) {
+                        while (op_stack.length) {
+                            var o2_op = op_stack.pop()
+                            if (ops.indexOf(o2_op) < 0) break
+                            var o1_p = prescedence(token)
+                            var o2_p = prescedence(o2_op)
+                            if (isLeftAssoc(token)?( o1_p >= o2_p ): ( o1_p > o2_p )) {
+                                op_stack.push(o2_op)
+                                break
+                            }
+                            output.push(o2_op)
+                        }
+                        op_stack.push(token)
+                    } else if (token == ")" || token == "}") op_stack.push(")")
+                    else if (token == "(" || token == "{") {
+                        while (op_stack.length) {
+                            var op = op_stack.pop()
+                            if (op == ")") {
+                                break
+                            } else {
+                                output.push(op)
+                            }
+                        }
+                    } else {
+                        output.push(token)
+                    }
+                }
+                while (op_stack.length) {
+                    output.push(op_stack.pop())
+                }
+                output.reverse()
+                return output
+            }
+
+            function tree2vars (tree) {
+                var token = tree.value
+                if ( ops.indexOf(token) > -1 ) {
+                    var ret = []
+                    if (l = tree2vars(tree.left)) ret = ret.concat(l)
+                    if (r = tree2vars(tree.right)) ret = ret.concat(r)
+                    return ret
+                    // return [].push(tree2vars(tree.left,path+"l"),tree2vars(tree.right,path+"r"))
+                } else if ( isNaN(token) ) {
+                    return [tree]
+                } else {
+                    return false
+                }
+            }
+
+            function pre2tree (input) {
+                var count = 0
+                function Node (index, p, isLeftChild) {
+                    count++
+                    this.parent = p
+                    this.value = input[index]
+                    this.isLeftChild = isLeftChild
+                    if (ops.indexOf(this.value) > -1) {
+                        this.left = new Node(count,this,true)
+                        this.right = new Node(count,this,false)
+                    } else {
+                        this.left = null
+                        this.right = null
+                    }
+                }
+                return new Node(0, null, null);
+            }
+
+            function tree2pre (tree) {
+                if (tree.left == null) return tree.value
+                return [tree.value].concat(tree2pre(tree.left),tree2pre(tree.right))
+            }
+
+            function node2root (node) {
+                var ret = []
+                var cur = node
+                while (cur.parent) {
+                    ret.push(cur)
+                    cur = cur.parent
+                }
+                return ret
+            }
+
+            function applyFn (tree, check, action) {
+                if (check(tree)) action(tree)
+                if (tree.left) applyFn(tree.left, check, action)
+                if (tree.right) applyFn(tree.right, check, action)
+            }
+
+            function solveIn (input, v) {
+                var eq = input.split(" = ")
+                var pre = ["-"].concat(in2pre(eq[0]),in2pre(eq[1]))
+                return solve(pre, v)
+            }
+
+            function solve (input, v) {
+                var sols = []
+                var nsols = []
+                var tree = pre2tree(input)
+                var vars = tree2vars(tree)
+                var var_unames = unique(vars.map(function(v){ return v.value }))
+                // console.log(var_unames);
+                switch (var_unames.length) {
+                    case 1:
+                        applyFn(tree, function(tree) { // purge minus
+                            return tree.value == "-"
+                        }, function (tree) {
+                            tree.value = "+"
+                            var tmp = new Node("\\cdot", tree, false, null, tree.right)
+                            tmp.left = new Node("-1", tmp, true, null, null)
+                            tree.right = tmp
+                        })
+                        console.log(tree);
+                        applyFn(tree, function(tree) { // purge divide
+                            return tree.value == "\\div"
+                        }, function (tree) {
+                            if (!isNaN(tree.left.value) && !isNaN(tree.right.value)) { // both number
+                                var left = tree.left.value
+                                var right = tree.right.value
+                                if ( left % right == 0 ) { // left is divisible by right
+                                    tree.value = "" + (left / right)
+                                } else {
+                                    tree.value = "\\frac{ " + left + " }{ " + right + " }"
+                                }
+                                tree.left = null
+                                tree.right = null
+                            } else {
+                                if ( tree.parent.value == "\\div") {
+                                    if (tree.isLeftChild) {
+                                        tree.right = new Node("\\cdot", tree, false, tree.right, tree.parent.right)
+                                        tree.parent = null
+                                    } else {
+                                        var n1 = tree.parent.left
+                                        var n2 = tree.right
+                                        tree.parent.right = tree.left
+                                        tree.parent.left = new Node("\\cdot", tree.parent, true, n1, n2)
+                                        tree = tree.parent
+                                    }
+                                } else if ( tree.parent.value == "\\cdot" ) {
+                                    var num = tree.left
+                                    tree.left = tree.parent
+                                    if (tree.isLeftChild) {
+                                        tree.left.left = num
+                                    } else {
+                                        tree.left.right = num
+                                    }
+                                    tree.parent = null
+                                } else if ( tree.parent.value == "+" ) {
+                                    applyFn(tree.parent, function(tree) {
+
+                                    }, function(tree) {
+
+                                    })
+                                } else if ( tree.parent == null ) {
+                                    nsols.push(solve(tree2pre(tree.right)))
+                                    tree = tree.left
+                                }
+                            }
+                        })
+                        return tree2latex(tree)
+                    default:
+                        return "not\\,implemented"
+                }
+            }
+
+            function tree2latex (tree) {
+                switch (tree.value) {
+                    case "v":
+                        return "\\sqrt[" + tree2latex(tree.right) + "]{" + tree2latex(tree.left) + "}"
+                    case "^":
+                        return "{ " + tree2latex(tree.left) + " ^ " + tree2latex(tree.right) + " }"
+                    case "\\div":
+                        return "\\frac{" + tree2latex(tree.left) + "}{" + tree2latex(tree.right) + "}"
+                    case "\\cdot":
+                        return tree2latex(tree.left) + " \\cdot ( " + tree2latex(tree.right) + " )"
+                    case "+":
+                        return tree2latex(tree.left) + " + " + tree2latex(tree.right)
+                    case "-":
+                        return tree2latex(tree.left) + " - " + tree2latex(tree.right)
+                    default:
+                        return tree.value
+                }
+            }
+
+            $(function() {
+                $("#do").click(function() {
+                    $('.eq').each(function() {
+                        var input = $(this).find('span script').html()
+                        $("<span></span>", {
+                            text: "\\( " + solveIn(input, "x") + " \\)",
+                            style: "color: red"
+                        }).appendTo($(this))
+                    })
+                    MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
+                })
+            })
+        </script>
+    </body>
+</html>
