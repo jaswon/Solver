@@ -8,15 +8,18 @@
             .eq {
                 height: 60px;
             }
+            body {
+                font-size: 150%;
+            }
         </style>
     </head>
     <body>
-        <div class="eq"><span>\( y \cdot 3 = 3 + x ^ 5 - y \qquad \)</span></div>
-        <div class="eq"><span>\( y = 3 \cdot x ^ 5 \qquad \)</span></div>
-        <div class="eq"><span>\( y = x ^ { 5 + 3 } \qquad \)</span></div>
-        <div class="eq"><span>\( 2 + 4 \cdot x = 3 \cdot x + 5 \qquad \)</span></div>
-        <div class="eq"><span>\( 2 + 4 \cdot x ^ 2 = 3 \cdot x + 5 + 6 \div 2 \div 3 \qquad \)</span></div>
-        <div class="eq"><span>\( y = ( 3 \cdot x + 5 ) \div 3 ^ 4 \qquad \)</span></div>
+        <div class="eq"><span>\( y \cdot 3 = 3 + x ^ 5 - y \)</span></div>
+        <div class="eq"><span>\( y = 3 \cdot x ^ 5 \)</span></div>
+        <div class="eq"><span>\( y = x ^ { 5 + 3 } \)</span></div>
+        <div class="eq"><span>\( 2 + 4 \cdot x = 3 \cdot x + 5 \)</span></div>
+        <div class="eq"><span>\( 2 + 4 \cdot x ^ 2 = 3 \cdot x + 5 + 6 \div 2 \div 3 \)</span></div>
+        <div class="eq"><span>\( 12 = ( 3 \cdot x + 5 ) \div 3 ^ 4 \)</span></div>
         <button type="button" id="do">Solve</button>
         <script type="text/javascript">
             var ops = ['^','\\cdot','\\div','+','-','v']
@@ -28,8 +31,8 @@
                 '-': '+'
             }
 
-            function Node (value, p, isLeftChild, left, right) {
-                this.parent = p
+            function Node (value, parent, isLeftChild, left, right) {
+                this.parent = parent
                 this.value = value
                 this.isLeftChild = isLeftChild
                 this.left = left
@@ -156,10 +159,16 @@
                 return ret
             }
 
-            function applyFn (tree, check, action) {
-                if (check(tree)) action(tree)
-                if (tree.left) applyFn(tree.left, check, action)
-                if (tree.right) applyFn(tree.right, check, action)
+            function applyFn (node, root, restart, check, action) {
+                if (restart) {
+                    applyFn(root, root, false, check, action)
+                } else if (check(node)) {
+                    action(node)
+                    applyFn(node, root, true, check, action)
+                } else {
+                    if (node.left) applyFn(node.left, root, false, check, action)
+                    if (node.right) applyFn(node.right, root, false, check, action)
+                }
             }
 
             function solveIn (input, v) {
@@ -173,68 +182,97 @@
                 var nsols = []
                 var tree = pre2tree(input)
                 var vars = tree2vars(tree)
+                console.log(vars);
                 var var_unames = unique(vars.map(function(v){ return v.value }))
                 // console.log(var_unames);
                 switch (var_unames.length) {
                     case 1:
-                        applyFn(tree, function(tree) { // purge minus
-                            return tree.value == "-"
-                        }, function (tree) {
-                            tree.value = "+"
-                            var tmp = new Node("\\cdot", tree, false, null, tree.right)
+                        applyFn(tree, tree, false, function(t) { // purge minus
+                            return t.value == "-"
+                        }, function (t) {
+                            t.value = "+"
+                            var tmp = new Node("\\cdot", t, false, null, t.right)
                             tmp.left = new Node("-1", tmp, true, null, null)
-                            tree.right = tmp
+                            tmp.right.parent = tmp
+                            t.right = tmp
                         })
                         console.log(tree);
-                        applyFn(tree, function(tree) { // purge divide
-                            return tree.value == "\\div"
-                        }, function (tree) {
-                            if (!isNaN(tree.left.value) && !isNaN(tree.right.value)) { // both number
-                                var left = tree.left.value
-                                var right = tree.right.value
-                                if ( left % right == 0 ) { // left is divisible by right
-                                    tree.value = "" + (left / right)
-                                } else {
-                                    tree.value = "\\frac{ " + left + " }{ " + right + " }"
-                                }
-                                tree.left = null
-                                tree.right = null
+                        applyFn(tree, tree, false, function(t) { // distribute
+                            return (t.value == "\\cdot" && (t.left.value == "+" || t.right.value == "+"))
+                        }, function (t) {
+                            var sum, factor
+                            if (t.left.value == "+" ) {
+                                sum = t.left
+                                factor = t.right
                             } else {
-                                if ( tree.parent.value == "\\div") {
-                                    if (tree.isLeftChild) {
-                                        tree.right = new Node("\\cdot", tree, false, tree.right, tree.parent.right)
-                                        tree.parent = null
-                                    } else {
-                                        var n1 = tree.parent.left
-                                        var n2 = tree.right
-                                        tree.parent.right = tree.left
-                                        tree.parent.left = new Node("\\cdot", tree.parent, true, n1, n2)
-                                        tree = tree.parent
-                                    }
-                                } else if ( tree.parent.value == "\\cdot" ) {
-                                    var num = tree.left
-                                    tree.left = tree.parent
-                                    if (tree.isLeftChild) {
-                                        tree.left.left = num
-                                    } else {
-                                        tree.left.right = num
-                                    }
-                                    tree.parent = null
-                                } else if ( tree.parent.value == "+" ) {
-                                    applyFn(tree.parent, function(tree) {
-
-                                    }, function(tree) {
-
-                                    })
-                                } else if ( tree.parent == null ) {
-                                    nsols.push(solve(tree2pre(tree.right)))
-                                    tree = tree.left
-                                }
+                                sum = t.right
+                                factor = t.left
                             }
+                            sum.left = new Node("\\cdot", sum, true, factor, sum.left)
+                            sum.right = new Node("\\cdot", sum, false, factor, sum.right)
+                            t.parent[t.isLeftChild?"left":"right"] = sum
                         })
+                        // applyFn(tree, tree, false, function(t) { // factor
+                        //
+                        // }, function (t) {
+                        //
+                        // })
+                        // applyFn(tree, tree, function(t) { // purge divide
+                        //     return t.value == "\\div"
+                        // }, function (t) {
+                        //     if (!isNaN(t.left.value) && !isNaN(t.right.value)) { // both number
+                        //         var left = t.left.value
+                        //         var right = t.right.value
+                        //         if ( left % right == 0 ) { // left is divisible by right
+                        //             t.value = "" + (left / right)
+                        //         } else {
+                        //             t.value = "\\frac{ " + left + " }{ " + right + " }"
+                        //         }
+                        //         t.left = null
+                        //         t.right = null
+                        //     } else {
+                        //         if ( t.parent.value == "\\div") {
+                        //             if (t.isLeftChild) {
+                        //                 t.right = new Node("\\cdot", t, false, t.right, t.parent.right)
+                        //                 t.parent = null
+                        //             } else {
+                        //                 var n1 = t.parent.left
+                        //                 var n2 = t.right
+                        //                 t.parent.right = t.left
+                        //                 t.parent.left = new Node("\\cdot", t.parent, true, n1, n2)
+                        //                 t = t.parent
+                        //             }
+                        //         } else if ( t.parent.value == "\\cdot" ) {
+                        //             var num = t.left
+                        //             t.left = t.parent
+                        //             if (t.isLeftChild) {
+                        //                 t.left.left = num
+                        //             } else {
+                        //                 t.left.right = num
+                        //             }
+                        //             t.parent = null
+                        //         } else if ( t.parent.value == "+" ) {
+                        //             // var mult = t.right
+                        //             // var isLeftChild;
+                        //             // do {
+                        //             //     isLeftChild = t.isLeftChild
+                        //             //     t = t.parent
+                        //             //     console.log("doing:",t);
+                        //             // } while (t.value == '+')
+                        //             // if (isLeftChild) {
+                        //             //     t.right = new Node("\\cdot",t,false,t.right,mult)
+                        //             // } else {
+                        //             //     t.left = new Node("\\cdot",t,true,t.left,mult)
+                        //             // }
+                        //         } else if ( t.parent == null ) {
+                        //             nsols.push(solve(t2pre(t.right)))
+                        //             t = t.left
+                        //         }
+                        //     }
+                        // })
                         return tree2latex(tree)
                     default:
-                        return "not\\,implemented"
+                        return "not\\ implemented"
                 }
             }
 
@@ -247,7 +285,7 @@
                     case "\\div":
                         return "\\frac{" + tree2latex(tree.left) + "}{" + tree2latex(tree.right) + "}"
                     case "\\cdot":
-                        return tree2latex(tree.left) + " \\cdot ( " + tree2latex(tree.right) + " )"
+                        return tree2latex(tree.left) + " \\cdot " + tree2latex(tree.right)
                     case "+":
                         return tree2latex(tree.left) + " + " + tree2latex(tree.right)
                     case "-":
@@ -262,7 +300,7 @@
                     $('.eq').each(function() {
                         var input = $(this).find('span script').html()
                         $("<span></span>", {
-                            text: "\\( " + solveIn(input, "x") + " \\)",
+                            text: "\\( \\qquad " + solveIn(input, "x") + " \\)",
                             style: "color: red"
                         }).appendTo($(this))
                     })
