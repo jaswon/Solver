@@ -14,12 +14,14 @@
         </style>
     </head>
     <body>
-        <div class="eq"><span>\( y \cdot 3 = 3 + x ^ 5 - y \)</span></div>
-        <div class="eq"><span>\( y = 3 \cdot x ^ 5 \)</span></div>
-        <div class="eq"><span>\( y = x ^ { 5 + 3 } \)</span></div>
-        <div class="eq"><span>\( 2 + 4 \cdot x = 3 \cdot x + 5 \)</span></div>
-        <div class="eq"><span>\( 2 + 4 \cdot x ^ 2 = 3 \cdot x + 5 + 6 \div 2 \div 3 \)</span></div>
-        <div class="eq"><span>\( 12 = ( 3 \cdot x + 5 ) \div 3 ^ 4 \)</span></div>
+        <table>
+            <tr><td class="eq"><span>\( y \cdot 3 = 3 + x ^ 5 - y \)</span></td></tr>
+            <tr><td class="eq"><span>\( y = 3 \cdot x ^ 5 \)</span></td></tr>
+            <tr><td class="eq"><span>\( y = x ^ { 5 + 3 } \)</span></td></tr>
+            <tr><td class="eq"><span>\( 2 + 4 \cdot x = 3 \cdot x + 5 \)</span></td></tr>
+            <tr><td class="eq"><span>\( 2 + 4 \cdot x ^ 2 = 3 \cdot x + 5 + 6 \div 2 \div 3 \)</span></td></tr>
+            <tr><td class="eq"><span>\( 12 = ( 3 \cdot x + 5 ) \div 3 ^ 4 \)</span></td></tr>
+        </table>
         <button type="button" id="do">Solve</button>
         <script type="text/javascript">
             var ops = ['^','\\cdot','\\div','+','-','v']
@@ -297,9 +299,9 @@
 
             $(function() {
                 $("#do").click(function() {
-                    $('.eq').each(function() {
-                        var input = $(this).find('span script').html()
-                        $("<span></span>", {
+                    $('tr').each(function() {
+                        var input = $(this).find('.eq span script').html()
+                        $("<td></td>", {
                             text: "\\( \\qquad " + solveIn(input, "x") + " \\)",
                             style: "color: red"
                         }).appendTo($(this))
